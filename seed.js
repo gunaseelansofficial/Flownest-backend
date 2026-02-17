@@ -1,6 +1,10 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const dotenv = require('dotenv');
+const dns = require('dns');
+
+// Force Google DNS to resolve Atlas SRV records
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 dotenv.config();
 

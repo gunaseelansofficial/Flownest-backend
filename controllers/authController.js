@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const Tenant = require('../models/Tenant');
+const { sendWelcomeEmail } = require('../utils/emailService');
 
 const generateToken = (id) => {
     return jwt.sign({ id }, process.env.JWT_SECRET || 'secret123', { expiresIn: '30d' });
@@ -34,6 +35,9 @@ const registerOwner = async (req, res) => {
 
         user.tenantId = tenant._id;
         await user.save();
+
+        // Send welcome email (asynchronous, don't block response)
+        sendWelcomeEmail(user).catch(err => console.error('Failed to send welcome email:', err));
 
         res.status(201).json({
             _id: user._id,

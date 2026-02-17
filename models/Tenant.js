@@ -10,6 +10,7 @@ const tenantSchema = new mongoose.Schema({
     trialExpiresAt: { type: Date },
     subscriptionExpiresAt: { type: Date },
     paymentProof: { type: String },
+    paymentReferenceNumber: { type: String },
     paymentApproved: { type: Boolean, default: false },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });

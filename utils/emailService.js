@@ -1,0 +1,99 @@
+const nodemailer = require('nodemailer');
+
+const transporter = nodemailer.createTransport({
+    host: process.env.EMAIL_HOST,
+    port: process.env.EMAIL_PORT,
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
+});
+
+const sendWelcomeEmail = async (user) => {
+    try {
+        const mailOptions = {
+            from: `"FlowNest" <${process.env.EMAIL_USER}>`,
+            to: user.email,
+            subject: 'Welcome to FlowNest!',
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; rounded: 12px;">
+                    <h2 style="color: #0f172a;">Welcome to FlowNest, ${user.name}!</h2>
+                    <p style="color: #475569; line-height: 1.6;">
+                        Thank you for choosing FlowNest for your business management needs. We're excited to help you streamline your operations.
+                    </p>
+                    <div style="background-color: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                        <p style="margin: 0; font-weight: bold; color: #0f172a;">Quick Next Steps:</p>
+                        <ul style="color: #475569; padding-left: 20px;">
+                            <li>Set up your services in the "Services" tab</li>
+                            <li>Add your staff members</li>
+                            <li>Start billing from the POS dashboard</li>
+                        </ul>
+                    </div>
+                    <p style="color: #475569;">If you have any questions, feel free to reply to this email.</p>
+                    <p style="color: #64748b; font-size: 14px; margin-top: 40px;">Best regards,<br>The FlowNest Team</p>
+                </div>
+            `,
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log(`Welcome email sent to ${user.email}`);
+    } catch (error) {
+        console.error('Error sending welcome email:', error);
+    }
+};
+
+const sendDailySalesReport = async (owner, salesReport) => {
+    try {
+        const mailOptions = {
+            from: `"FlowNest Notifications" <${process.env.EMAIL_USER}>`,
+            to: owner.email,
+            subject: `Daily Sales Report - ${new Date().toLocaleDateString()}`,
+            html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px;">
+                    <h2 style="color: #0f172a;">Daily Sales Summary</h2>
+                    <p style="color: #475569;">Here is the sales overview for your shop today:</p>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin: 30px 0;">
+                        <div style="background-color: #f0fdf4; padding: 15px; border-radius: 8px; border: 1px solid #bbf7d0;">
+                            <p style="margin: 0; font-size: 12px; color: #166534; text-transform: uppercase; font-weight: bold;">Total Revenue</p>
+                            <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: 800; color: #14532d;">₹${salesReport.totalRevenue}</p>
+                        </div>
+                        <div style="background-color: #eff6ff; padding: 15px; border-radius: 8px; border: 1px solid #bfdbfe;">
+                            <p style="margin: 0; font-size: 12px; color: #1e40af; text-transform: uppercase; font-weight: bold;">Transactions</p>
+                            <p style="margin: 5px 0 0 0; font-size: 24px; font-weight: 800; color: #1e3a8a;">${salesReport.totalTransactions}</p>
+                        </div>
+                    </div>
+
+                    <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+                        <thead>
+                            <tr style="border-bottom: 2px solid #f1f5f9;">
+                                <th style="text-align: left; padding: 12px 0; color: #64748b; font-size: 14px;">Method</th>
+                                <th style="text-align: right; padding: 12px 0; color: #64748b; font-size: 14px;">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${salesReport.methodBreakdown.map(method => `
+                                <tr style="border-bottom: 1px solid #f1f5f9;">
+                                    <td style="padding: 12px 0; color: #0f172a; font-weight: 500;">${method.name}</td>
+                                    <td style="padding: 12px 0; text-align: right; color: #0f172a; font-weight: bold;">₹${method.amount}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <p style="color: #64748b; font-size: 14px; margin-top: 40px; text-align: center;">Generated by FlowNest Auto-Reporter</p>
+                </div>
+            `,
+        };
+
+        await transporter.sendMail(mailOptions);
+        console.log(`Daily sales report sent to owner: ${owner.email}`);
+    } catch (error) {
+        console.error('Error sending daily sales report:', error);
+    }
+};
+
+module.exports = {
+    sendWelcomeEmail,
+    sendDailySalesReport,
+};

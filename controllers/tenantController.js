@@ -4,7 +4,7 @@ const Tenant = require('../models/Tenant');
 // @route   GET /api/tenants/me
 // @access  Private
 const getTenantDetails = async (req, res) => {
-    const tenant = await Tenant.findById(req.user.tenantId).populate('owner', 'name');
+    const tenant = await Tenant.findById(req.user.tenantId).populate('owner', 'name email');
     if (tenant) {
         res.json(tenant);
     } else {
@@ -30,10 +30,11 @@ const updateTenant = async (req, res) => {
     const tenant = await Tenant.findById(req.user.tenantId);
 
     if (tenant) {
-        tenant.name = req.body.name || tenant.name;
-        tenant.address = req.body.address || tenant.address;
-        tenant.phone = req.body.phone || tenant.phone;
-        tenant.businessType = req.body.businessType || tenant.businessType;
+        tenant.name = req.body.name === "" ? tenant.name : (req.body.name || tenant.name);
+        tenant.address = req.body.address === "" ? tenant.address : (req.body.address || tenant.address);
+        tenant.phone = req.body.phone === "" ? tenant.phone : (req.body.phone || tenant.phone);
+        tenant.businessType = req.body.businessType === "" ? tenant.businessType : (req.body.businessType || tenant.businessType);
+        tenant.logo = req.body.logo || tenant.logo;
 
         if (req.body.ownerName || req.body.ownerEmail) {
             const owner = await User.findById(tenant.owner);
@@ -44,19 +45,41 @@ const updateTenant = async (req, res) => {
             }
         }
 
-        const updatedTenant = await tenant.save();
+        await tenant.save();
+
+        // Re-fetch with population to ensure frontend gets full data
+        const updatedTenant = await Tenant.findById(tenant._id).populate('owner', 'name email');
         res.json(updatedTenant);
     } else {
         res.status(404).json({ message: 'Tenant not found' });
     }
 };
 
+const Notification = require('../models/Notification');
+
 const submitProof = async (req, res) => {
-    const tenant = await Tenant.findById(req.user.tenantId);
+    const tenant = await Tenant.findById(req.user.tenantId).populate('owner', 'name');
     if (tenant) {
         tenant.paymentProof = req.body.paymentProof;
+        tenant.paymentReferenceNumber = req.body.referenceNumber;
         tenant.paymentApproved = false;
         await tenant.save();
+
+        // Notify Super Admins
+        try {
+            const superAdmins = await User.find({ role: 'superadmin' });
+            for (const admin of superAdmins) {
+                await Notification.create({
+                    recipient: admin._id,
+                    title: 'New Payment Proof Submitted',
+                    message: `Shop "${tenant.name}" (Owner: ${tenant.owner.name}) has submitted a payment proof for verification. Ref: ${req.body.referenceNumber}`,
+                    type: 'info'
+                });
+            }
+        } catch (notifErr) {
+            console.error('Failed to notify superadmins:', notifErr);
+        }
+
         res.json({ message: 'Proof submitted successfully' });
     } else {
         res.status(404).json({ message: 'Tenant not found' });

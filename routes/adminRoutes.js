@@ -12,6 +12,27 @@ router.get('/tenants', protect, authorize('superadmin'), async (req, res) => {
     res.json(tenants);
 });
 
+// Force Expire Subscription (Body based ID for robustness)
+router.post('/expire-manual', protect, authorize('superadmin'), async (req, res) => {
+    const { tenantId } = req.body;
+    console.log(`[Admin] Manual Expiry request for: ${tenantId}`);
+    try {
+        const tenant = await Tenant.findById(tenantId);
+        if (tenant) {
+            tenant.subscriptionStatus = 'expired';
+            tenant.subscriptionExpiresAt = new Date();
+            await tenant.save();
+            console.log(`[Admin] Successfully expired: ${tenant.name}`);
+            res.json({ message: 'Subscription expired manually' });
+        } else {
+            res.status(404).json({ message: 'Tenant not found' });
+        }
+    } catch (error) {
+        console.error('[Admin] Manual Expiry Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 // Approve/Reject payment proof
 router.post('/tenants/:id/approve', protect, authorize('superadmin'), async (req, res) => {
     const tenant = await Tenant.findById(req.params.id);
@@ -28,19 +49,37 @@ router.post('/tenants/:id/approve', protect, authorize('superadmin'), async (req
     }
 });
 
-// Terminate Tenant
+// Permanently Delete Tenant and its Owner
+router.delete('/tenants/:id', protect, authorize('superadmin'), async (req, res) => {
+    try {
+        const tenant = await Tenant.findById(req.params.id);
+        if (!tenant) return res.status(404).json({ message: 'Tenant not found' });
+
+        // Delete the owner first
+        await User.deleteMany({ tenantId: tenant._id });
+
+        // Delete the tenant
+        await Tenant.findByIdAndDelete(req.params.id);
+
+        res.json({ message: 'Tenant and associated data deleted permanently' });
+    } catch (error) {
+        res.status(500).json({ message: 'Deletion failed', error: error.message });
+    }
+});
+
+// Terminate/Deactivate Tenant
 router.patch('/tenants/:id/terminate', protect, authorize('superadmin'), async (req, res) => {
     const tenant = await Tenant.findById(req.params.id);
     if (tenant) {
         tenant.subscriptionStatus = 'terminated';
-        // Optionally expire immediately
         tenant.subscriptionExpiresAt = new Date();
         await tenant.save();
-        res.json({ message: 'Tenant terminated' });
+        res.json({ message: 'Tenant deactivated' });
     } else {
         res.status(404).json({ message: 'Tenant not found' });
     }
 });
+
 
 // Extend Subscription
 router.patch('/tenants/:id/subscription', protect, authorize('superadmin'), async (req, res) => {
