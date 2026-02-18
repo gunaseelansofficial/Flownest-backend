@@ -2,6 +2,8 @@ const mongoose = require('mongoose');
 const Invoice = require('../models/Invoice');
 const Notification = require('../models/Notification');
 const Tenant = require('../models/Tenant');
+const Expense = require('../models/Expense');
+
 
 // @desc    Create a new invoice
 // @route   POST /api/invoices
@@ -62,6 +64,7 @@ const getInvoices = async (req, res) => {
 
 // @desc    Get dashboard stats
 // @route   GET /api/invoices/stats
+
 // @access  Private
 const getDashboardStats = async (req, res) => {
     try {
@@ -174,6 +177,14 @@ const getDashboardStats = async (req, res) => {
             ? ((customerStats[0].repeatCustomers / customerStats[0].totalCustomers) * 100).toFixed(0)
             : 0;
 
+        // Fetch Total Expenses
+        const totalExpensesResult = await Expense.aggregate([
+            { $match: { tenantId, status: 'approved' } },
+            { $group: { _id: null, total: { $sum: "$amount" } } }
+        ]);
+        const totalExpenses = totalExpensesResult.length > 0 ? totalExpensesResult[0].total : 0;
+        const netProfit = totalStats.totalRevenue - totalExpenses;
+
         res.json({
             totalRevenue: totalStats.totalRevenue,
             totalInvoices: totalStats.totalCount,
@@ -182,7 +193,9 @@ const getDashboardStats = async (req, res) => {
             revenueData,
             serviceData,
             dailyAverage,
-            repeatRate
+            repeatRate,
+            totalExpenses,
+            netProfit
         });
     } catch (error) {
         console.error('Stats Error:', error);
