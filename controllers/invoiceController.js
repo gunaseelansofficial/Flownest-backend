@@ -13,7 +13,7 @@ const createInvoice = async (req, res) => {
         const formattedServices = services.map(s => ({
             serviceId: (s._id && s._id.length === 24 && !s._id.startsWith('custom-')) ? s._id : null,
             name: s.name,
-            price: s.price,
+            price: s.sellPrice || s.price || 0,
             quantity: s.quantity || 1
         }));
 
@@ -54,7 +54,9 @@ const createInvoice = async (req, res) => {
 // @route   GET /api/invoices
 // @access  Private
 const getInvoices = async (req, res) => {
-    const invoices = await Invoice.find({ tenantId: req.user.tenantId }).sort({ createdAt: -1 });
+    const invoices = await Invoice.find({ tenantId: req.user.tenantId })
+        .populate('services.serviceId')
+        .sort({ createdAt: -1 });
     res.json(invoices);
 };
 

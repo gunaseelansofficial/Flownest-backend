@@ -26,7 +26,7 @@ const getStaff = async (req, res) => {
 // @route   POST /api/staff
 // @access  Private/Owner
 const addStaff = async (req, res) => {
-    const { name, email, password, phone, role } = req.body;
+    const { name, email, password, phone, role, shift, daySalary } = req.body;
 
     // Self-healing
     if (!req.user.tenantId) {
@@ -51,6 +51,8 @@ const addStaff = async (req, res) => {
         role: role || 'staff',
         tenantId: req.user.tenantId,
         phone,
+        shift,
+        daySalary,
     });
 
     res.status(201).json(staff);
@@ -67,6 +69,8 @@ const updateStaff = async (req, res) => {
         staff.email = req.body.email || staff.email;
         staff.phone = req.body.phone || staff.phone;
         staff.role = req.body.role || staff.role;
+        staff.shift = req.body.shift || staff.shift;
+        staff.daySalary = req.body.daySalary !== undefined ? req.body.daySalary : staff.daySalary;
         if (req.body.password) {
             staff.password = req.body.password;
         }

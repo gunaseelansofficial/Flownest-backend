@@ -7,6 +7,8 @@ const userSchema = new mongoose.Schema({
     password: { type: String, required: true },
     role: { type: String, enum: ['owner', 'staff', 'superadmin'], default: 'owner' },
     tenantId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tenant' },
+    shift: { type: String, enum: ['Morning', 'Evening', 'General'], default: 'General' },
+    daySalary: { type: Number, default: 0 },
 }, { timestamps: true });
 
 userSchema.pre('save', async function (next) {

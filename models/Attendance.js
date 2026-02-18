@@ -6,6 +6,7 @@ const attendanceSchema = new mongoose.Schema({
     checkIn: { type: Date, default: Date.now },
     checkOut: { type: Date },
     totalHours: { type: Number, default: 0 },
+    salaryEarned: { type: Number, default: 0 },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Attendance', attendanceSchema);
