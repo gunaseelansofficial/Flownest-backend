@@ -127,4 +127,55 @@ router.post('/message', protect, authorize('superadmin'), async (req, res) => {
     }
 });
 
+// Get aggregated sales for all owners (Super Admin only)
+router.get('/owner-sales', protect, authorize('superadmin'), async (req, res) => {
+    try {
+        const Invoice = require('../models/Invoice');
+
+        const salesData = await Tenant.aggregate([
+            {
+                $lookup: {
+                    from: 'invoices',
+                    localField: '_id',
+                    foreignField: 'tenantId',
+                    as: 'invoices'
+                }
+            },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'owner',
+                    foreignField: '_id',
+                    as: 'ownerDetails'
+                }
+            },
+            {
+                $unwind: {
+                    path: '$ownerDetails',
+                    preserveNullAndEmptyArrays: true
+                }
+            },
+            {
+                $project: {
+                    name: 1,
+                    businessType: 1,
+                    subscriptionStatus: 1,
+                    owner: {
+                        name: '$ownerDetails.name',
+                        email: '$ownerDetails.email'
+                    },
+                    totalSales: { $sum: '$invoices.totalAmount' },
+                    orderCount: { $size: '$invoices' },
+                    recentInvoices: { $slice: ['$invoices', -10] } // Last 10 invoices for detail view
+                }
+            }
+        ]);
+
+        res.json(salesData);
+    } catch (error) {
+        console.error('[Admin] Owner Sales Error:', error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 module.exports = router;
