@@ -4,7 +4,37 @@ const Tenant = require('../models/Tenant');
 const { sendWelcomeEmail } = require('../utils/emailService');
 
 const generateToken = (id) => {
-    return jwt.sign({ id }, process.env.JWT_SECRET || 'secret123', { expiresIn: '30d' });
+    return jwt.sign({ id }, process.env.JWT_SECRET || 'secret123', {
+        expiresIn: process.env.JWT_EXPIRE || '30d'
+    });
+};
+
+const sendTokenResponse = (user, statusCode, res) => {
+    const token = generateToken(user._id);
+
+    const cookieOptions = {
+        expires: new Date(
+            Date.now() + (process.env.JWT_COOKIE_EXPIRE || 30) * 24 * 60 * 60 * 1000
+        ),
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'Strict'
+    };
+
+    res.status(statusCode)
+        .cookie('token', token, cookieOptions)
+        .json({
+            success: true,
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            role: user.role,
+            tenantId: user.tenantId?._id || user.tenantId,
+            tenant: user.tenantId ? {
+                subscriptionStatus: user.tenantId.subscriptionStatus,
+                subscriptionExpiresAt: user.tenantId.subscriptionExpiresAt
+            } : null
+        });
 };
 
 // @desc    Register a new owner and tenant
@@ -39,14 +69,7 @@ const registerOwner = async (req, res) => {
         // Send welcome email (asynchronous, don't block response)
         sendWelcomeEmail(user).catch(err => console.error('Failed to send welcome email:', err));
 
-        res.status(201).json({
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            tenantId: user.tenantId,
-            token: generateToken(user._id),
-        });
+        sendTokenResponse(user, 201, res);
     } else {
         res.status(400).json({ message: 'Invalid user data' });
     }
@@ -61,21 +84,27 @@ const loginUser = async (req, res) => {
     const user = await User.findOne({ email }).populate('tenantId');
 
     if (user && (await user.matchPassword(password))) {
-        res.json({
-            _id: user._id,
-            name: user.name,
-            email: user.email,
-            role: user.role,
-            tenantId: user.tenantId ? user.tenantId._id : null,
-            tenant: user.tenantId ? {
-                subscriptionStatus: user.tenantId.subscriptionStatus,
-                subscriptionExpiresAt: user.tenantId.subscriptionExpiresAt
-            } : null,
-            token: generateToken(user._id),
-        });
+        sendTokenResponse(user, 200, res);
     } else {
         res.status(401).json({ message: 'Invalid email or password' });
     }
 };
 
-module.exports = { registerOwner, loginUser };
+// @desc    Log user out / clear cookie
+// @route   GET /api/auth/logout
+// @access  Public
+const logoutUser = async (req, res) => {
+    res.cookie('token', 'none', {
+        expires: new Date(Date.now() + 10 * 1000),
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'Strict'
+    });
+
+    res.status(200).json({
+        success: true,
+        message: 'Logged out successfully'
+    });
+};
+
+module.exports = { registerOwner, loginUser, logoutUser };
