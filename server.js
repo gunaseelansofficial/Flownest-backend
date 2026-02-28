@@ -16,6 +16,36 @@ initCronTasks();
 
 const app = express();
 
+// 1. MUST BE FIRST: Configure CORS with specific origins (NO WILDCARDS)
+const allowedOrigins = [
+    'https://www.flownest.in',
+    'https://flownest.in',
+    'http://localhost:5173',
+    'http://localhost:3000'
+];
+
+app.use(cors({
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            console.error(`CORS Error: Origin ${origin} not allowed`);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-XSRF-TOKEN'],
+    exposedHeaders: ['Set-Cookie'],
+    optionsSuccessStatus: 200
+}));
+
+// 2. Cookie Parser (Required for credentials/cookies)
+app.use(cookieParser());
+
 // Security HTTP headers
 app.use(helmet());
 
@@ -32,12 +62,8 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// Body parser, reading data from body into req.body
+// Body parser
 app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ limit: '10kb', extended: true }));
-
-// Cookie parser
-app.use(cookieParser());
 
 // Data sanitization against NoSQL query injection
 app.use(mongoSanitize());
@@ -45,35 +71,7 @@ app.use(mongoSanitize());
 // Data sanitization against XSS
 app.use(xss());
 
-// Configure CORS
-const allowedOrigins = [
-    'https://www.flownest.in',
-    'https://flownest.in',
-    'http://localhost:5173',
-    'http://localhost:3000'
-];
-
-if (process.env.ALLOWED_ORIGINS) {
-    allowedOrigins.push(...process.env.ALLOWED_ORIGINS.split(','));
-}
-
-app.use(cors({
-    origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
-        if (!origin) return callback(null, true);
-
-        if (allowedOrigins.indexOf(origin) !== -1) {
-            callback(null, true);
-        } else {
-            console.error(`CORS Error: Origin ${origin} not allowed`);
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-XSRF-TOKEN'],
-    exposedHeaders: ['Set-Cookie']
-}));
+// XSS and Sanitization logic follows...
 
 // Disable X-Powered-By header
 app.disable('x-powered-by');
