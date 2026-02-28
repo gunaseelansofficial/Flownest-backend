@@ -16,6 +16,7 @@ const createInvoice = async (req, res) => {
             serviceId: (s._id && s._id.length === 24 && !s._id.startsWith('custom-')) ? s._id : null,
             name: s.name,
             price: s.sellPrice || s.price || 0,
+            originalPrice: s.originalPrice || 0,
             quantity: s.quantity || 1
         }));
 
@@ -73,13 +74,30 @@ const getDashboardStats = async (req, res) => {
         }
 
         const tenantId = new mongoose.Types.ObjectId(req.user.tenantId);
+        const { range } = req.query;
 
-        // Basic Stats (Today vs Total)
+        // Calculate startDate based on range
+        let startDate = new Date();
+        startDate.setHours(0, 0, 0, 0);
+
+        if (range === 'week') {
+            startDate.setDate(startDate.getDate() - 7);
+        } else if (range === 'month') {
+            startDate.setDate(startDate.getDate() - 30);
+        } else if (range === 'year') {
+            startDate.setDate(startDate.getDate() - 365);
+        } else if (range === 'day') {
+            // startDate is already today 00:00:00
+        } else {
+            // Default to week if not specified or unknown
+            startDate.setDate(startDate.getDate() - 7);
+        }
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         const statsResult = await Invoice.aggregate([
-            { $match: { tenantId } },
+            { $match: { tenantId, createdAt: { $gte: startDate } } },
             {
                 $facet: {
                     totalStats: [
@@ -112,14 +130,7 @@ const getDashboardStats = async (req, res) => {
                         { $sort: { value: -1 } },
                         { $limit: 10 }
                     ],
-                    last7DaysRevenue: [
-                        {
-                            $match: {
-                                createdAt: {
-                                    $gte: new Date(new Date().setDate(new Date().getDate() - 7))
-                                }
-                            }
-                        },
+                    timeRangeRevenue: [
                         {
                             $group: {
                                 _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
@@ -127,6 +138,15 @@ const getDashboardStats = async (req, res) => {
                             }
                         },
                         { $sort: { _id: 1 } }
+                    ],
+                    totalOriginalCost: [
+                        { $unwind: "$services" },
+                        {
+                            $group: {
+                                _id: null,
+                                totalCost: { $sum: { $multiply: ["$services.originalPrice", "$services.quantity"] } }
+                            }
+                        }
                     ]
                 }
             }
@@ -139,16 +159,53 @@ const getDashboardStats = async (req, res) => {
         // Process Revenue Velocity for Chart
         const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const revenueData = [];
-        for (let i = 6; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            const dateStr = d.toISOString().split('T')[0];
-            const found = data.last7DaysRevenue.find(r => r._id === dateStr);
-            revenueData.push({
-                name: dayNames[d.getDay()],
-                total: found ? found.total : 0,
-                date: dateStr
-            });
+
+        let daysToLookBack = 7;
+        if (range === 'day') daysToLookBack = 1;
+        else if (range === 'month') daysToLookBack = 30;
+        else if (range === 'year') daysToLookBack = 365;
+
+        // For simplicity, we'll keep the daily grouping for month, but for year we might want monthly
+        // However, to keep it consistent with the frontend chart expectation, we'll stick to daily for now
+        // or just return the data we have.
+
+        if (range === 'year') {
+            // For year, return monthly grouping
+            const monthlyRevenue = await Invoice.aggregate([
+                { $match: { tenantId, createdAt: { $gte: startDate } } },
+                {
+                    $group: {
+                        _id: { $dateToString: { format: "%Y-%m", date: "$createdAt" } },
+                        total: { $sum: "$totalAmount" }
+                    }
+                },
+                { $sort: { _id: 1 } }
+            ]);
+
+            const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            for (let i = 11; i >= 0; i--) {
+                const d = new Date();
+                d.setMonth(d.getMonth() - i);
+                const monthStr = d.toISOString().slice(0, 7);
+                const found = monthlyRevenue.find(r => r._id === monthStr);
+                revenueData.push({
+                    name: monthNames[d.getMonth()],
+                    total: found ? found.total : 0,
+                    date: monthStr
+                });
+            }
+        } else {
+            for (let i = daysToLookBack - 1; i >= 0; i--) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                const dateStr = d.toISOString().split('T')[0];
+                const found = data.timeRangeRevenue.find(r => r._id === dateStr);
+                revenueData.push({
+                    name: daysToLookBack <= 7 ? dayNames[d.getDay()] : dateStr.slice(5),
+                    total: found ? found.total : 0,
+                    date: dateStr
+                });
+            }
         }
 
         // Process Service Splitting for Chart
@@ -177,13 +234,15 @@ const getDashboardStats = async (req, res) => {
             ? ((customerStats[0].repeatCustomers / customerStats[0].totalCustomers) * 100).toFixed(0)
             : 0;
 
-        // Fetch Total Expenses
+        // Fetch Total Expenses for the time range
         const totalExpensesResult = await Expense.aggregate([
-            { $match: { tenantId, status: 'approved' } },
+            { $match: { tenantId, status: 'approved', createdAt: { $gte: startDate } } },
             { $group: { _id: null, total: { $sum: "$amount" } } }
         ]);
         const totalExpenses = totalExpensesResult.length > 0 ? totalExpensesResult[0].total : 0;
-        const netProfit = totalStats.totalRevenue - totalExpenses;
+
+        const totalOriginalCost = data.totalOriginalCost[0]?.totalCost || 0;
+        const netProfit = totalStats.totalRevenue - totalOriginalCost - totalExpenses;
 
         res.json({
             totalRevenue: totalStats.totalRevenue,

@@ -8,6 +8,7 @@ const invoiceSchema = new mongoose.Schema({
         serviceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Service' },
         name: { type: String },
         price: { type: Number },
+        originalPrice: { type: Number, default: 0 },
         quantity: { type: Number, default: 1 }
     }],
     totalAmount: { type: Number, required: true },
