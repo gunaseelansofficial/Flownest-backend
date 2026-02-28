@@ -12,14 +12,20 @@ const generateToken = (id) => {
 const sendTokenResponse = (user, statusCode, res) => {
     const token = generateToken(user._id);
 
+    const isProduction = process.env.NODE_ENV === 'production';
+
     const cookieOptions = {
         expires: new Date(
             Date.now() + (process.env.JWT_COOKIE_EXPIRE || 30) * 24 * 60 * 60 * 1000
         ),
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'Strict'
+        secure: isProduction, // Must be true for SameSite: None
+        sameSite: isProduction ? 'None' : 'Lax', // 'None' required for cross-origin credentials
+        path: '/'
     };
+
+    // If you have a specific domain for production, uncomment and set it
+    // if (isProduction) cookieOptions.domain = '.flownest.in';
 
     res.status(statusCode)
         .cookie('token', token, cookieOptions)
